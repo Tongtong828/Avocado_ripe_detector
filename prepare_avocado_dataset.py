@@ -19,7 +19,7 @@ TRAIN_RATIO = 0.8
 RANDOM_SEED = 42
 
 # Set to None to use all available images
-MAX_IMAGES_PER_CLASS = None
+MAX_IMAGES_PER_CLASS = 2800
 
 # If True, the output folder will be deleted and rebuilt
 CLEAR_OUTPUT_FIRST = True
