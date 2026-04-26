@@ -120,6 +120,12 @@ class _HomePageState extends State<HomePage>
     });
   }
 
+  void _closeResultOverlay() {
+    setState(() {
+      resultLabel = null;
+    });
+  }
+
   @override
   void dispose() {
     _scanController.dispose();
@@ -256,7 +262,9 @@ class _HomePageState extends State<HomePage>
           children: [
             corner(
               alignment: Alignment.topLeft,
-              borderRadius: const BorderRadius.only(topLeft: Radius.circular(10)),
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(10),
+              ),
               top: 20,
               left: 20,
               bottom: null,
@@ -268,7 +276,9 @@ class _HomePageState extends State<HomePage>
             ),
             corner(
               alignment: Alignment.topRight,
-              borderRadius: const BorderRadius.only(topRight: Radius.circular(10)),
+              borderRadius: const BorderRadius.only(
+                topRight: Radius.circular(10),
+              ),
               top: 20,
               right: 20,
               bottom: null,
@@ -411,111 +421,103 @@ class _HomePageState extends State<HomePage>
     );
   }
 
-  @override
-  Widget build(BuildContext context) {
+  Widget _buildMainContent() {
     final bool showLiveHint = selectedImage == null;
 
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+      child: Column(
+        children: [
+          Expanded(
+            child: Container(
+              width: double.infinity,
+              decoration: BoxDecoration(
+                color: const Color(0xFFEFF6EC),
+                borderRadius: BorderRadius.circular(28),
+                border: Border.all(color: const Color(0xFFD6E5D0)),
+                boxShadow: const [
+                  BoxShadow(
+                    color: Color(0x12000000),
+                    blurRadius: 18,
+                    offset: Offset(0, 8),
+                  ),
+                ],
+              ),
+              child: Stack(
+                children: [
+                  Positioned.fill(
+                    child: _buildPreviewArea(),
+                  ),
+                  if (showLiveHint || isScanning) _buildLiveOverlay(),
+                  if (selectedImage == null) _buildCaptureButton(),
+                  if (selectedImage != null && !isScanning)
+                    Positioned(
+                      top: 14,
+                      right: 14,
+                      child: Material(
+                        color: Colors.black54,
+                        borderRadius: BorderRadius.circular(999),
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(999),
+                          onTap: _clearImage,
+                          child: const Padding(
+                            padding: EdgeInsets.all(8),
+                            child: Icon(
+                              Icons.close,
+                              color: Colors.white,
+                              size: 20,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 18),
+          SizedBox(
+            width: double.infinity,
+            height: 54,
+            child: OutlinedButton.icon(
+              onPressed: isScanning ? null : _pickFromGallery,
+              style: OutlinedButton.styleFrom(
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(28),
+                ),
+              ),
+              icon: const Icon(Icons.photo_library_outlined),
+              label: const Text(
+                'Choose from gallery',
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Avocado Ripeness Detector'),
         centerTitle: true,
       ),
-      body: Padding(
-        padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
-        child: Column(
-          children: [
-            Expanded(
-              child: Container(
-                width: double.infinity,
-                decoration: BoxDecoration(
-                  color: const Color(0xFFEFF6EC),
-                  borderRadius: BorderRadius.circular(28),
-                  border: Border.all(color: const Color(0xFFD6E5D0)),
-                  boxShadow: const [
-                    BoxShadow(
-                      color: Color(0x12000000),
-                      blurRadius: 18,
-                      offset: Offset(0, 8),
-                    ),
-                  ],
-                ),
-                child: Stack(
-                  children: [
-                    Positioned.fill(
-                      child: _buildPreviewArea(),
-                    ),
-
-                    if (showLiveHint || isScanning) _buildLiveOverlay(),
-
-                    if (selectedImage == null) _buildCaptureButton(),
-
-                    if (selectedImage != null && !isScanning)
-                      Positioned(
-                        top: 14,
-                        right: 14,
-                        child: Material(
-                          color: Colors.black54,
-                          borderRadius: BorderRadius.circular(999),
-                          child: InkWell(
-                            borderRadius: BorderRadius.circular(999),
-                            onTap: _clearImage,
-                            child: const Padding(
-                              padding: EdgeInsets.all(8),
-                              child: Icon(
-                                Icons.close,
-                                color: Colors.white,
-                                size: 20,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-              ),
+      body: Stack(
+        children: [
+          _buildMainContent(),
+          if (resultLabel != null)
+            ResultCardOverlay(
+              label: resultLabel!,
+              confidence: confidence,
+              onClose: _closeResultOverlay,
             ),
-            const SizedBox(height: 18),
-            SizedBox(
-              width: double.infinity,
-              height: 54,
-              child: OutlinedButton.icon(
-                onPressed: isScanning ? null : _pickFromGallery,
-                style: OutlinedButton.styleFrom(
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(28),
-                  ),
-                ),
-                icon: const Icon(Icons.photo_library_outlined),
-                label: const Text(
-                  'Choose from gallery',
-                  style: TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(height: 20),
-            if (resultLabel != null)
-              AnimatedSwitcher(
-                duration: const Duration(milliseconds: 500),
-                transitionBuilder: (child, animation) {
-                  return FadeTransition(
-                    opacity: animation,
-                    child: ScaleTransition(
-                      scale: animation,
-                      child: child,
-                    ),
-                  );
-                },
-                child: ResultCard(
-                  key: ValueKey(resultLabel),
-                  label: resultLabel!,
-                  confidence: confidence,
-                ),
-              ),
-          ],
-        ),
+        ],
       ),
     );
   }
