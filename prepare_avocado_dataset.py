@@ -3,7 +3,10 @@ import random
 import shutil
 import csv
 
-# Path configuration
+# =========================================================
+# 1. Path configuration
+# =========================================================
+
 SOURCE_ROOT = Path(
     r"E:\A_connected environments\DLSN\Hass Avocado Ripening Photographic Dataset\Avocado Ripening Dataset"
 )
@@ -12,33 +15,39 @@ OUTPUT_ROOT = Path(
     r"E:\A_connected environments\DLSN\Avocado_dataset"
 )
 
-# Adjustable parameters
+# =========================================================
+# 2. Adjustable parameters
+# =========================================================
 
 TRAIN_RATIO = 0.8
 RANDOM_SEED = 42
 
-# Set to an integer to limit each final class size
-# Set to None to use all available images
-MAX_IMAGES_PER_CLASS = 2800
+# For the 1/3/5 experiment, use all available images first,
+# then automatically balance all classes to the smallest class.
+MAX_IMAGES_PER_CLASS = None
 
 # If True, the output folder will be deleted and rebuilt
 CLEAR_OUTPUT_FIRST = True
 
 SUPPORTED_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
 
-# New stage mapping:
-# 1,2 -> unripe
-# 3   -> ready
-# 4,5 -> overripe
+# Final mapping for this round:
+# 1 -> unripe
+# 3 -> ready
+# 5 -> overripe
+# Stages 2 and 4 are excluded automatically
 STAGE_TO_CLASS = {
     "1": "unripe",
-    "2": "unripe",
     "3": "ready",
-    "4": "overripe",
     "5": "overripe",
 }
 
-# Helper functions
+# If True, all final classes will be balanced to the smallest class size
+BALANCE_TO_SMALLEST_CLASS = True
+
+# =========================================================
+# 3. Helper functions
+# =========================================================
 
 def is_image_file(path: Path) -> bool:
     return path.is_file() and path.suffix.lower() in SUPPORTED_IMAGE_EXTENSIONS
@@ -77,6 +86,9 @@ def parse_image_filename(path: Path):
         "class_name": "unripe",
         "group_id": "T10_d01_002_1"
     }
+
+    If the stage is not in STAGE_TO_CLASS (e.g. 2 or 4),
+    the file will be skipped automatically.
     """
     stem = path.stem
     parts = stem.split("_")
@@ -101,7 +113,7 @@ def parse_image_filename(path: Path):
 
     class_name = STAGE_TO_CLASS[stage]
 
-    # Keep the paired views (a/b) of the same sample and stage together
+    # Keep paired views (a/b) of the same sample and stage together
     group_id = f"{storage}_{day}_{sample}_{stage}"
 
     return {
@@ -180,6 +192,31 @@ def limit_groups_by_image_count(group_dict, max_images=None):
     return selected
 
 
+def count_images_in_groups(group_dict):
+    return sum(len(group) for group in group_dict.values())
+
+
+def balance_all_classes_to_smallest(grouped_records):
+    """
+    Balance all final classes to the smallest class size, based on image count.
+    """
+    class_counts = {
+        class_name: count_images_in_groups(group_dict)
+        for class_name, group_dict in grouped_records.items()
+    }
+
+    smallest_class_size = min(class_counts.values())
+
+    balanced_records = {}
+    for class_name, group_dict in grouped_records.items():
+        balanced_records[class_name] = limit_groups_by_image_count(
+            group_dict,
+            max_images=smallest_class_size
+        )
+
+    return balanced_records, class_counts, smallest_class_size
+
+
 def split_groups_into_train_test(group_dict, train_ratio=0.8):
     """
     Split by group to avoid placing paired images (a/b) into different subsets.
@@ -231,7 +268,9 @@ def copy_records_to_output(records, subset_name, class_name):
     return copied_paths
 
 
-# Main pipeline
+# =========================================================
+# 4. Main pipeline
+# =========================================================
 
 def main():
     random.seed(RANDOM_SEED)
@@ -261,26 +300,42 @@ def main():
 
     grouped_records = group_records_by_class_and_group(records)
 
+    # First, optionally limit each class independently
+    limited_records = {}
+    for class_name in ["unripe", "ready", "overripe"]:
+        limited_records[class_name] = limit_groups_by_image_count(
+            grouped_records[class_name],
+            max_images=MAX_IMAGES_PER_CLASS
+        )
+
+    # Then balance all classes to the smallest one
+    if BALANCE_TO_SMALLEST_CLASS:
+        balanced_records, original_counts, smallest_class_size = balance_all_classes_to_smallest(
+            limited_records
+        )
+        print("\nBalancing classes to the smallest class size...")
+        for class_name in ["unripe", "ready", "overripe"]:
+            print(f"{class_name}: original={original_counts[class_name]}")
+        print(f"Balanced target size per class: {smallest_class_size}")
+    else:
+        balanced_records = limited_records
+
     summary_rows = []
     total_train_images = 0
     total_test_images = 0
 
     for class_name in ["unripe", "ready", "overripe"]:
-        class_groups = grouped_records[class_name]
+        class_groups_before = grouped_records[class_name]
+        class_groups_after = balanced_records[class_name]
 
-        original_group_count = len(class_groups)
-        original_image_count = sum(len(group) for group in class_groups.values())
+        original_group_count = len(class_groups_before)
+        original_image_count = sum(len(group) for group in class_groups_before.values())
 
-        selected_groups = limit_groups_by_image_count(
-            class_groups,
-            max_images=MAX_IMAGES_PER_CLASS
-        )
-
-        selected_group_count = len(selected_groups)
-        selected_image_count = sum(len(group) for group in selected_groups.values())
+        selected_group_count = len(class_groups_after)
+        selected_image_count = sum(len(group) for group in class_groups_after.values())
 
         train_groups, test_groups = split_groups_into_train_test(
-            selected_groups,
+            class_groups_after,
             train_ratio=TRAIN_RATIO
         )
 
